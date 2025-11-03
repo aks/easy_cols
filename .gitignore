@@ -15,6 +15,7 @@
 
 # Ignore gem build artifacts
 /*.gem
+/pkg/
 
 # Ignore temporary files
 /tmp

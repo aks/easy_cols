@@ -38,7 +38,8 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'rake', '~> 13.0'
 
   spec.metadata['rubygems_mfa_required'] = 'true'
-  spec.metadata['source_code_uri'] = 'https://github.com/aks/easy_cols'
-  spec.metadata['changelog_uri']   = 'https://github.com/aks/easy_cols/blob/main/CHANGELOG.md'
-  spec.metadata['bug_tracker_uri'] = 'https://github.com/aks/easy_cols/issues'
+  spec.metadata['homepage_uri']          = spec.homepage
+  spec.metadata['source_code_uri']       = 'https://github.com/aks/easy_cols'
+  spec.metadata['changelog_uri']         = 'https://github.com/aks/easy_cols/blob/main/CHANGELOG.md'
+  spec.metadata['bug_tracker_uri']       = 'https://github.com/aks/easy_cols/issues'
 end
