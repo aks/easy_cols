@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [ '*' ]  # Run on all branches including feature branches
+    tags:              # Trigger on tag pushes
+      - 'v*'           # Only tags starting with 'v'
+  pull_request:
+    branches: [ '*' ]  # Run on PRs targeting any branch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby-version: ['3.2', '3.3']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ matrix.ruby-version }}
+        bundler-cache: true
+
+    - name: Run unit tests
+      run: bundle exec rspec --pattern "spec/**/*_spec.rb" --exclude-pattern "spec/integration/**/*_spec.rb"
+
+    - name: Run integration tests
+      run: bundle exec rspec spec/integration/
+
+    - name: Run RuboCop
+      run: bundle exec rubocop
+
+    - name: Build gem
+      run: bundle exec rake build
+
+  release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for tags
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.3'
+        bundler-cache: true
+
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG#v}
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Release tag: $TAG"
+        echo "Version: $VERSION"
+
+    - name: Verify version matches code
+      run: |
+        CODE_VERSION=$(ruby -r './lib/easy_cols/version' -e "puts EasyCols::VERSION")
+        TAG_VERSION="${{ steps.version.outputs.version }}"
+        if [ "$CODE_VERSION" != "$TAG_VERSION" ]; then
+          echo "Error: Version mismatch!"
+          echo "Code version: $CODE_VERSION"
+          echo "Tag version: $TAG_VERSION"
+          exit 1
+        fi
+        echo "✓ Version matches: $CODE_VERSION"
+
+    - name: Build gem
+      run: bundle exec rake build
+
+    - name: Install GitHub CLI
+      run: |
+        type -p curl >/dev/null || (apt-get update && apt-get install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && apt-get update \
+        && apt-get install gh -y
+
+    - name: Create GitHub Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG="${{ steps.version.outputs.tag }}"
+        VERSION="${{ steps.version.outputs.version }}"
+
+        # Create release notes (you can enhance this later)
+        NOTES=$(cat <<EOF
+        Release $VERSION
+
+        See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+        EOF
+        )
+
+        gh release create "$TAG" \
+          --title "Release $TAG" \
+          --notes "$NOTES" \
+          pkg/easy_cols-*.gem \
+          --repo ${{ github.repository }}
+      continue-on-error: true
+
+    - name: Publish to RubyGems
+      env:
+        RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+      run: |
+        gem push pkg/easy_cols-*.gem
+

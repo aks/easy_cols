@@ -1,0 +1,6 @@
+--require spec_helper
+--colour
+--backtrace
+--format Fuubar
+--fail_fast
+--seed 1234
