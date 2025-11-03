@@ -66,6 +66,13 @@ namespace :version do
   end
 end
 
+# Override Bundler's release task with our custom one
+begin
+  Rake::Task['release'].clear
+rescue RuntimeError
+  # Task doesn't exist yet, that's fine
+end
+
 desc 'Create and push release tag for current version'
 task :release do
   require 'open3'
