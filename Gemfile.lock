@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    easy_cols (0.1.0)
+    easy_cols (0.1.1)
       csv (~> 3.0)
       optparse (~> 0.1)
 
