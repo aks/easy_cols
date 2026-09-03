@@ -11,10 +11,18 @@ module EasyCols
 
       selectors.each do |selector|
         result = case selector
-                 when Integer then select_by_index(selector)
-                 when Range   then select_by_range(selector)
-                 when Array   then select_by_array(selector)
-                 when String  then select_by_name(selector)
+                 when Integer
+                   select_by_index(selector)
+                 when Range
+                   select_by_range(selector)
+                 when Array
+                   if selector.first == :name_range && selector.size == 3
+                     select_by_name_range(selector[1], selector[2])
+                   else
+                     select_by_array(selector)
+                   end
+                 when String
+                   select_by_name(selector)
                  else
                    raise SelectionError, "Invalid selector type: #{selector.class}"
                  end
@@ -27,8 +35,9 @@ module EasyCols
     private
 
     def select_by_index(index)
-      if index >= 0 && index < @headers.length
-        [index]
+      resolved = index < 0 ? @headers.length + index : index
+      if resolved >= 0 && resolved < @headers.length
+        [resolved]
       else
         raise SelectionError, "Column index #{index} is out of range (0-#{@headers.length - 1})"
       end
@@ -54,6 +63,26 @@ module EasyCols
         [header_idx]
       else
         raise SelectionError, "Column '#{name}' not found. Available: #{@headers.join(', ')}"
+      end
+    end
+
+    def select_by_name_range(from_name, to_name)
+      from_idx = @headers.find_index(from_name)
+      to_idx   = @headers.find_index(to_name)
+
+      missing = []
+      missing << from_name unless from_idx
+      missing << to_name   unless to_idx
+
+      unless missing.empty?
+        raise SelectionError,
+              "Column name range :#{from_name}-:#{to_name} not found. Missing: #{missing.join(', ')}. Available: #{@headers.join(', ')}"
+      end
+
+      if from_idx <= to_idx
+        (from_idx..to_idx).to_a
+      else
+        (to_idx..from_idx).to_a
       end
     end
   end

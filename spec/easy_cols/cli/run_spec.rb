@@ -23,12 +23,25 @@ RSpec.describe EasyCols::CLI, '#run' do
       expect { cli.run([csv_file.path, '0', '1']) }.to output(/John.*25/).to_stdout
     end
 
+    it 'supports FIELDS... FILE ordering (DWIM) for numeric selectors' do
+      # `ec 0 1 FILE` should behave the same as `ec FILE 0 1`
+      file_first = capture_stdout do
+        cli.run([csv_file.path, '0', '1'])
+      end
+
+      fields_first = capture_stdout do
+        cli.run(['0', '1', csv_file.path])
+      end
+
+      expect(fields_first).to eq(file_first)
+    end
+
     it 'handles column range selector' do
       expect { cli.run([csv_file.path, '0-1']) }.to output(/Name.*Age/).to_stdout
     end
 
-    it 'handles column name selector' do
-      expect { cli.run([csv_file.path, 'Name', 'City']) }.to output(/John.*NYC/).to_stdout
+    it 'handles column name selector with :NAME syntax' do
+      expect { cli.run([csv_file.path, ':Name', ':City']) }.to output(/John.*NYC/).to_stdout
     end
 
     it 'handles comma-separated column selectors' do
@@ -52,6 +65,20 @@ RSpec.describe EasyCols::CLI, '#run' do
     it 'handles stdin input with -' do
       allow($stdin).to receive(:read).and_return(csv_data)
       expect { cli.run(['-', '0', '1']) }.to output(/John.*25/).to_stdout
+    end
+
+    it 'treats numeric first argument as selectors when no file exists (DWIM stdin)' do
+      # Simulate pipe usage: `... | ec 0 1`
+      allow($stdin).to receive(:read).and_return(csv_data)
+
+      output = capture_stdout do
+        cli.run(['0', '1'])
+      end
+
+      expect(output).to include('Name')
+      expect(output).to include('Age')
+      expect(output).to include('John')
+      expect(output).to include('25')
     end
 
     it 'defaults to all columns when using stdin with no selectors' do
@@ -83,10 +110,10 @@ RSpec.describe EasyCols::CLI, '#run' do
       expect(stdin_output).to eq(file_output)
     end
 
-    it 'produces identical output when used as pipe filter (no file arg) vs direct file input' do
+    it 'produces identical output when used as pipe filter (no file arg) vs direct file input with :NAME selectors' do
       # Test with file input
       file_output = capture_stdout do
-        cli.run([csv_file.path, 'Name', 'City'])
+        cli.run([csv_file.path, ':Name', ':City'])
       end
 
       # Test with stdin (pipe filter) - simulate when no file path is provided
@@ -94,7 +121,8 @@ RSpec.describe EasyCols::CLI, '#run' do
       stdin_output = capture_stdout do
         allow($stdin).to receive(:read).and_return(csv_data)
         cli2.instance_variable_set(:@file_path, nil)
-        cli2.instance_variable_set(:@column_selectors, ['Name', 'City'])
+        parsed = cli2.send(:parse_column_selectors, [':Name', ':City'])
+        cli2.instance_variable_set(:@column_selectors, parsed)
         cli2.send(:process_input)
       end
 
@@ -115,14 +143,14 @@ RSpec.describe EasyCols::CLI, '#run' do
       expect(stdin_output).to eq(file_output)
     end
 
-    it 'works as a pipe filter with options and column selectors' do
+    it 'works as a pipe filter with options and :NAME column selectors' do
       file_output = capture_stdout do
-        cli.run(['--format', 'csv', csv_file.path, 'Name', 'City'])
+        cli.run(['--format', 'csv', csv_file.path, ':Name', ':City'])
       end
 
       stdin_output = capture_stdout do
         allow($stdin).to receive(:read).and_return(csv_data)
-        cli.run(['--format', 'csv', '-', 'Name', 'City'])
+        cli.run(['--format', 'csv', '-', ':Name', ':City'])
       end
 
       expect(stdin_output).to eq(file_output)

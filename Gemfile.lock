@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    easy_cols (0.1.2)
+    easy_cols (0.2.0)
       csv (~> 3.0)
       optparse (~> 0.1)
 
@@ -78,6 +78,7 @@ GEM
     unicode-display_width (3.1.5)
       unicode-emoji (~> 4.0, >= 4.0.4)
     unicode-emoji (4.0.4)
+    yard (0.9.45)
 
 PLATFORMS
   ruby
@@ -91,6 +92,7 @@ DEPENDENCIES
   rubocop (~> 1.50)
   rubocop-rspec (~> 2.20)
   simplecov (~> 0.22)
+  yard
 
 BUNDLED WITH
    2.6.9
