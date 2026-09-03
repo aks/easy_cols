@@ -46,8 +46,8 @@ ec data.csv
 # Select columns by index
 ec data.csv 0 1 2
 
-# Select columns by name
-ec data.csv 'Name' 'Email'
+# Select columns by name (colon-prefixed)
+ec data.csv :Name :Email
 
 # Select column ranges
 ec data.csv 0-5
@@ -146,7 +146,7 @@ Bob  | 35
 ### TSV Processing
 
 ```bash
-$ ec --in=tsv data.tsv 'Name' 'City'
+$ ec --in=tsv data.tsv :Name :City
 Name , City
 John , NYC
 Jane , LA

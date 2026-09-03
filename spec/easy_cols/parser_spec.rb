@@ -74,6 +74,53 @@ RSpec.describe EasyCols::Parser do
 
         expect(result.first).to eq(['Name', 'Age', 'City'])
       end
+
+      it 'skips comment lines and uses the first non-comment line as header' do
+        plain_data = <<~DATA
+          ## passwd-style comment
+          # another comment line
+          nobody:*:-2:-2:Unprivileged User:/var/empty:/usr/bin/false
+          root:*:0:0:System Administrator:/var/root:/bin/sh
+        DATA
+
+        parser = EasyCols::Parser.new(format: 'plain', delimiter: ':')
+        result = parser.parse(plain_data)
+
+        # For plain format we return rows only; the first non-comment line
+        # is treated as the header by the CLI, not duplicated here.
+        expect(result.length).to eq(2) # header row + 1 data row
+        expect(result.first).to eq([
+          'nobody', '*', '-2', '-2', 'Unprivileged User', '/var/empty', '/usr/bin/false'
+        ])
+        expect(result[1].first).to eq('root')
+
+        # Leading comments are captured separately and inline comments
+        # are tracked relative to row indices.
+        expect(parser.leading_comments).to eq([
+          '## passwd-style comment',
+          '# another comment line'
+        ])
+        expect(parser.inline_comments).to be_empty
+      end
+
+      it 'tracks inline comments after data rows with row indices' do
+        plain_data = <<~DATA
+          Name:Age:City
+          John:25:NYC
+          # inline comment
+          Jane:30:LA
+        DATA
+
+        parser = EasyCols::Parser.new(format: 'plain', delimiter: ':')
+        result = parser.parse(plain_data)
+
+        expect(result.length).to eq(3) # header + 2 data rows
+        # Inline comment should be recorded as appearing before the
+        # third parsed row (row index 2, i.e., before Jane).
+        expect(parser.inline_comments).to eq([
+          [2, '# inline comment']
+        ])
+      end
     end
 
     context 'with custom delimiter' do

@@ -17,9 +17,28 @@ RSpec.describe EasyCols::ColumnSelector do
       expect(result).to eq([0, 2])
     end
 
+    it 'selects by name range using :NAME1-:NAME2 syntax' do
+      result = selector.select([[:name_range, 'Name', 'City']])
+      expect(result).to eq([0, 1, 2])
+    end
+
     it 'selects by range' do
       result = selector.select([(0..2)])
       expect(result).to eq([0, 1, 2])
+    end
+
+    it 'selects last column with -1' do
+      result = selector.select([-1])
+      expect(result).to eq([3])
+    end
+
+    it 'selects second-to-last column with -2' do
+      result = selector.select([-2])
+      expect(result).to eq([2])
+    end
+
+    it 'raises error for out-of-range negative index' do
+      expect { selector.select([-10]) }.to raise_error(EasyCols::SelectionError)
     end
 
     it 'raises error for invalid index' do

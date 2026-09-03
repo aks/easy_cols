@@ -7,6 +7,8 @@ module EasyCols
   class Parser
     SUPPORTED_FORMATS = %w[csv tsv table tbl plain auto].freeze
 
+    attr_reader :leading_comments, :inline_comments
+
     def initialize(**options)
       @options = {
         format:     'auto',
@@ -20,9 +22,18 @@ module EasyCols
         start:      nil,
         stop:       nil,
       }.merge(options)
+
+      @leading_comments = []
+      @inline_comments = []
+      @seen_first_non_comment = false
     end
 
     def parse(input)
+      # Reset per-parse state
+      @leading_comments = []
+      @inline_comments = []
+      @seen_first_non_comment = false
+
       format = detect_format(input) if @options[:format] == 'auto' || @options[:format].nil?
       format ||= @options[:format] || 'csv'
 
@@ -73,8 +84,10 @@ module EasyCols
       options = { headers: true }
       options[:col_sep] = @options[:delimiter] if @options[:delimiter]
 
+      filtered_input = filter_comment_lines(input)
+
       # Parse and convert to array format
-      csv_data = CSV.parse(input, **options)
+      csv_data = CSV.parse(filtered_input, **options)
       [csv_data.headers] + csv_data.map(&:fields)
     end
 
@@ -82,8 +95,10 @@ module EasyCols
       options = { headers: true, col_sep: "\t" }
       options[:col_sep] = @options[:delimiter] if @options[:delimiter]
 
+      filtered_input = filter_comment_lines(input)
+
       # Parse and convert to array format
-      csv_data = CSV.parse(input, **options)
+      csv_data = CSV.parse(filtered_input, **options)
       [csv_data.headers] + csv_data.map(&:fields)
     end
 
@@ -97,15 +112,17 @@ module EasyCols
       data_start = 0
 
       lines.each_with_index do |line, index|
-        next if line.strip.empty? && @options[:blanklines]
+        stripped = line.strip
+        next if stripped.empty? && @options[:blanklines]
+        next if comment_line?(line)
 
-        if header_line.nil? && !line.strip.empty?
+        if header_line.nil? && !stripped.empty?
           header_line = line
           data_start = index + 1  # Default to starting after header
           next
         end
 
-        if separator_line.nil? && header_line && line.match?(/^[-_|+]+$/)
+        if separator_line.nil? && header_line && stripped.match?(/^[-_|+]+$/)
           separator_line = line
           data_start = index + 1
           break
@@ -117,10 +134,13 @@ module EasyCols
 
       # Parse data rows
       data_rows = []
-      lines[data_start..].each do |line|
-        next if line.strip.empty? && @options[:blanklines]
-        next if line.match?(/^[-_|+]+$/) && @options[:lines]
+      lines[data_start..]&.each do |line|
+        stripped = line.strip
+        next if stripped.empty? && @options[:blanklines]
+        next if stripped.match?(/^[-_|+]+$/) && @options[:lines]
+        next if comment_line?(line)
 
+        @seen_first_non_comment = true unless @seen_first_non_comment
         data_rows << parse_table_line(line)
       end
 
@@ -132,15 +152,72 @@ module EasyCols
       lines = input.lines.map(&:chomp)
       delimiter = @options[:delimiter] || /\s+/
 
-      lines.map do |line|
-        next if line.strip.empty? && @options[:blanklines]
-        line.split(delimiter)
-      end.compact
+      rows = []
+      row_index = 0 # index into rows (0 = header row)
+
+      lines.each do |line|
+        stripped = line.strip
+        next if stripped.empty? && @options[:blanklines]
+
+        if comment_line?(line)
+          # After we've seen the first non-comment row, treat further
+          # comments as inline and remember their position relative to
+          # the structured rows (by row index in the parsed data).
+          @inline_comments << [row_index, line.chomp] if @seen_first_non_comment
+          next
+        end
+
+        @seen_first_non_comment = true unless @seen_first_non_comment
+        rows << line.split(delimiter)
+        row_index += 1
+      end
+
+      rows
     end
 
     def parse_table_line(line)
       # Split by " | " pattern for table format
       line.split(/\s*\|\s*/).map(&:strip)
+    end
+
+    def filter_comment_lines(input)
+      filtered_lines = []
+
+      input.lines.each do |line|
+        if comment_line?(line)
+          next
+        else
+          @seen_first_non_comment = true unless @seen_first_non_comment
+          filtered_lines << line
+        end
+      end
+
+      filtered_lines.join
+    end
+
+    def comment_line?(line)
+      return false unless line
+
+      raw = line.to_s.chomp
+      content = raw.lstrip
+
+      # Explicit comments pattern, if provided (future CLI options)
+      pattern = @options[:comments]
+      is_comment =
+        if pattern.is_a?(Regexp)
+          content.match?(pattern)
+        elsif pattern.is_a?(String)
+          content.match?(Regexp.new(pattern))
+        else
+          # Default heuristic: treat lines starting with '#' (including shebang '#!') as comments
+          content.start_with?('#')
+        end
+
+      if is_comment && !@seen_first_non_comment
+        @leading_comments << raw
+      end
+
+      is_comment
     end
   end
 end
